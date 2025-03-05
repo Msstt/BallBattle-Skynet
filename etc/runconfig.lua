@@ -11,11 +11,13 @@ return {
     -- 节点1
     node1 = {
         gateway = {[1] = {port = 8001}, [2] = {port = 8002}},
-        login = {[1] = {}, [2] = {}}
+        login = {[1] = {}, [2] = {}},
+        debug = {port = 9001}
     },
     -- 节点2
     node2 = {
         gateway = {[1] = {port = 8011}, [2] = {port = 8022}},
-        login = {[1] = {}, [2] = {}}
+        login = {[1] = {}, [2] = {}},
+        debug = {port = 9002}
     }
 }
