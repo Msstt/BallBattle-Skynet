@@ -24,6 +24,11 @@ skynet.start(function()
     for i, v in pairs(nodeconfig.login or {}) do
         local srv = skynet.newservice("login", "login", i)
     end
+    -- scene
+    for _, sid in pairs(runconfig.scene[node] or {}) do
+        local srv = skynet.newservice("scene", "scene", sid)
+    end
+
     -- agentmgr
     if runconfig.agentmgr.node == node then
         local srv = skynet.newservice("agentmgr", "agentmgr", 0)
