@@ -1,6 +1,8 @@
 return {
     -- 集群
     cluster = {node1 = "127.0.0.1:7771", node2 = "127.0.0.1:7772"},
+    --admin
+    admin = {node1 = "8888", node2 = "8889"},
     -- agentmgr
     agentmgr = {node = "node1"},
     -- scene

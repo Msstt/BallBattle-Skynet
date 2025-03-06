@@ -11,6 +11,8 @@ skynet.start(function()
 
     -- debug
     skynet.newservice("debug_console", "127.0.0.1", nodeconfig.debug.port)
+    -- admin
+    skynet.newservice("admin", "admin", 0)
     -- 节点管理
     local nodemgr = skynet.newservice("nodemgr", "nodemgr", 0)
     -- 集群

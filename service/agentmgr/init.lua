@@ -82,4 +82,31 @@ s.resp.reqkick = function(source, playerid, reason)
     return true
 end
 
+local get_online_count = function()
+    local num = 0
+    for i, v in pairs(players) do
+        num = num + 1
+    end
+    return num
+end
+
+s.resp.shutdown = function(source, num)
+    local count = get_online_count()
+    local n = 0
+    for playerid, player in pairs(players) do
+        skynet.fork(s.resp.reqkick, nil, playerid, "server close.")
+        n = n + 1
+        if n >= num then
+            break
+        end
+    end
+    while true do
+        skynet.sleep(200)
+        if count - get_online_count() == n then
+            break
+        end
+    end
+    return get_online_count()
+end
+
 s.start(...)

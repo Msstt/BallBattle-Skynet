@@ -9,6 +9,8 @@ local players = {} -- [playerid] = gateplayer
 local node = skynet.getenv("node")
 local nodeconfig = runconfig[node]
 
+local close = false
+
 function conn()
     local M = {fd = nil, playerid = nil}
     return M
@@ -92,6 +94,9 @@ local recv_loop = function(client)
 end
 
 local connect = function(client, address)
+    if close then
+        return
+    end
     s.log("Connect from: " .. address)
     local c = conn();
     c.fd = client;
@@ -153,6 +158,11 @@ s.resp.kick = function(source, playerid)
     connects[c.fd] = nil
     disconnect(c.fd)
     socket.close(c.fd)
+end
+
+s.resp.shutdown = function(source)
+    close = true
+    s.log("gateway have shutdown")
 end
 
 s.start(...)
