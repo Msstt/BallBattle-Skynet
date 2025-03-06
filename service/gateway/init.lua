@@ -16,9 +16,16 @@ function conn()
     return M
 end
 
-function player() 
-    local M = {playerid = nil, agent = nil, connect = nil} 
-    return M 
+function player()
+    local M = {
+        playerid = nil,
+        agent = nil,
+        connect = nil,
+        key = math.random(1, 99999999),
+        lost_connect_time = nil,
+        msgcache = {}
+    }
+    return M
 end
 
 local msg_unpack = function(str)
@@ -38,13 +45,31 @@ end
 
 local msg_pack = function(cmd, msg) return table.concat(msg, ",") .. "\r\n" end
 
+local process_reconnect = function(client, msg)
+    local playerid = tonumber(msg[2])
+    local key = tonumber(msg[3])
+    if not players[playerid] then return end
+    if players[playerid].connect then return end
+    if connects[client].playerid then return end
+    if players[playerid].key ~= key then return end
+    players[playerid].connect = client
+    connects[client].playerid = playerid
+    s.resp.send_by_fd(nil, client, {"reconnect", 0})
+    for i, msg in pairs(players[playerid].msgcache) do
+        s.resp.send_by_fd(nil, client, msg)
+    end
+    players[playerid].msgcache = {}
+end
+
 local process_msg = function(client, str)
     local cmd, msg = msg_unpack(str)
     s.log("Receive from" .. client .. " [" .. cmd .. "] {" ..
               table.concat(msg, ",") .. "}")
 
     local conn = connects[client]
-    if not conn.playerid then
+    if cmd == "reconnect" then
+        process_reconnect(client, msg)
+    elseif not conn.playerid then
         local login = "login" .. math.random(1, #nodeconfig.login)
         s.send(node, login, "client", client, cmd, msg)
     else
@@ -65,13 +90,18 @@ local process_buffer = function(client, read_buffer)
 end
 
 local disconnect = function(fd)
-    if not connects[fd] then
-        return
-    end
+    if not connects[fd] then return end
     local playerid = connects[fd].playerid
     if players[playerid] then
-        players[playerid] = nil
-        s.send(runconfig.agentmgr.node, "agentmgr", "reqkick", playerid, "sign out")
+        players[playerid].connect = nil
+        skynet.timeout(300 * 100, function()
+            if players[playerid].connect then return end
+            s.log("kick " .. playerid .. " becase reconnect timeout")
+            s.send(runconfig.agentmgr.node, "agentmgr", "reqkick", playerid,
+                   "reconnect timeout")
+        end)
+        -- s.send(runconfig.agentmgr.node, "agentmgr", "reqkick", playerid,
+        --        "sign out")
     end
 end
 
@@ -85,8 +115,8 @@ local recv_loop = function(client)
             read_buffer = process_buffer(client, read_buffer)
         else
             s.log("Socket close.")
-            connects[client] = nil
             disconnect(client)
+            connects[client] = nil
             socket.close(client)
             break
         end
@@ -94,9 +124,7 @@ local recv_loop = function(client)
 end
 
 local connect = function(client, address)
-    if close then
-        return
-    end
+    if close then return end
     s.log("Connect from: " .. address)
     local c = conn();
     c.fd = client;
@@ -113,19 +141,23 @@ function s.init()
 end
 
 s.resp.send_by_fd = function(source, fd, msg)
-    if not connects[fd] then
-        return
-    end
+    if not connects[fd] then return end
     local str = msg_pack(msg[1], msg)
-    s.log("Send to " .. fd .. ": [" .. msg[1] .. "] {" .. table.concat(msg, ",") .. "}")
+    s.log(
+        "Send to " .. fd .. ": [" .. msg[1] .. "] {" .. table.concat(msg, ",") ..
+            "}")
     socket.write(fd, str)
 end
 
 s.resp.send = function(source, playerid, msg)
-    if not players[playerid] then
-        return
-    end
+    if not players[playerid] then return end
     if not players[playerid].connect then
+        table.insert(players[playerid].msgcache, msg)
+        local len = #players[playerid].msgcache
+        if len > 500 then
+            s.call(runconfig.agentmgr.node, "agentmgr", "reqkick", playerid,
+                   "msgcache fill")
+        end
         return
     end
     s.resp.send_by_fd(source, players[playerid].connect.fd, msg)
@@ -133,7 +165,8 @@ end
 
 s.resp.sure_agent = function(source, fd, playerid, agent)
     if not connects[fd] then
-        s.send(runconfig.agentmgr.node, "agentmgr", "reqkick", playerid, "socket close")
+        s.send(runconfig.agentmgr.node, "agentmgr", "reqkick", playerid,
+               "socket close")
         return false
     end
 
@@ -143,20 +176,18 @@ s.resp.sure_agent = function(source, fd, playerid, agent)
     players[playerid].agent = agent
     players[playerid].connect = connects[fd]
 
+    s.resp.send(nil, playerid, {"reconnect", players[playerid].key})
+
     return true
 end
 
 s.resp.kick = function(source, playerid)
-    if not players[playerid] then
-        return
-    end
+    if not players[playerid] then return end
     local c = players[playerid].connect
     players[playerid] = nil
-    if not c then
-        return
-    end
-    connects[c.fd] = nil
+    if not c then return end
     disconnect(c.fd)
+    connects[c.fd] = nil
     socket.close(c.fd)
 end
 
